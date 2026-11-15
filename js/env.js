@@ -17,6 +17,7 @@ const SKY_FRAG = [
   'uniform vec3 uSun;',
   'uniform vec3 uSunColor;',
   'uniform float uNight;',
+  'uniform float uSpace;',
   'void main() {',
   '  vec3 dir = normalize(vWorldPos - cameraPosition);',
   '  float h = dir.y;',
@@ -25,7 +26,8 @@ const SKY_FRAG = [
   '  vec3 haze = mix(uHorizon, uSunColor, pow(az, 3.0) * 0.55 * (1.0 - uNight * 0.94));',
   '  float t = pow(1.0 - clamp(h / 0.20, 0.0, 1.0), 2.4);',
   '  vec3 col = mix(uZenith, haze, t);',
-  '  col = mix(uGround, col, smoothstep(-0.08, 0.01, h));',
+  '  col *= (1.0 - 0.965 * uSpace);',
+  '  col = mix(uGround * (1.0 - 0.96 * uSpace), col, smoothstep(-0.08, 0.01, h));',
   '  float sd = max(dot(dir, sd3), 0.0);',
   '  col += uSunColor * pow(sd, 9000.0) * 1.35 * (1.0 - uNight);',
   '  col += uSunColor * pow(sd, 26.0) * 0.16 * (1.0 - uNight * 0.88);',
@@ -54,6 +56,35 @@ function noiseTexture(size, base, speck) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// 地面贴图：三层合成 —— 大尺度土色斑块 / 中尺度碎石 / 细颗粒
+function groundTexture(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const img = g.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size * 6.0, v = y / size * 6.0;
+      const big = fbm(u, v, 4);                       // 大尺度：草地/裸土的斑块
+      const mid = fbm(u * 9.0 + 31.7, v * 9.0 + 12.4, 3);  // 中尺度：碎石与灌丛
+      const fine = fbm(u * 44.0 + 7.1, v * 44.0 + 3.9, 2); // 细颗粒
+      const t = big * 0.6 + mid * 0.28 + fine * 0.12;
+      // 干土 → 枯草 → 深色裸土
+      const r = 150 + t * 46 - mid * 22;
+      const gg = 138 + t * 40 - mid * 16;
+      const b = 112 + t * 26 - mid * 10;
+      const i = (y * size + x) * 4;
+      img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = b; img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
   return t;
 }
 
@@ -113,7 +144,8 @@ export function buildEnvironment(scene, renderer) {
     uGround: { value: new THREE.Color(0x3a3630) },
     uSun: { value: new THREE.Vector3(0.66, 0.30, -0.69).normalize() },
     uSunColor: { value: new THREE.Color(0xffd2a1) },
-    uNight: { value: 0.0 }
+    uNight: { value: 0.0 },
+    uSpace: { value: 0.0 }
   };
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(1400, 48, 24),
@@ -166,11 +198,17 @@ export function buildEnvironment(scene, renderer) {
   stars.frustumCulled = false;
   scene.add(stars);
 
-  const groundTex = noiseTexture(512, '#8b8578', '40,38,34');
-  groundTex.repeat.set(26, 26);
+  // 地面：三层叠加，避免"一块均匀棕黄"
+  //   a) 大尺度色斑（低频 fbm，每格 ~120 m）
+  //   b) 中尺度碎石/植被（高频，每格 ~8 m）
+  //   c) 发射场周边硬化地坪（半径 60 m 内偏灰）
+  const groundTex = groundTexture(1024);
+  // 圆盘半径 1100 m：铺 9 格等于每格 244 m，比发射台还大，地面会糊成一块均匀棕布。
+  // 72 格 ≈ 每格 30 m，近景才有碎石与土色的颗粒感。
+  groundTex.repeat.set(72, 72);
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(1100, 96),
-    new THREE.MeshStandardMaterial({ map: groundTex, color: 0x9a917f, roughness: 1.0, metalness: 0.0 })
+    new THREE.MeshStandardMaterial({ map: groundTex, color: 0xb3a894, roughness: 0.97, metalness: 0.0 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.05;
@@ -202,7 +240,19 @@ export function buildEnvironment(scene, renderer) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, fog: true }));
+    // 顶点色：山脚压暗、山脊提亮，再让雾把它推远 —— 纯色纸片会显得很假
+    const cols = [];
+    const cLow = new THREE.Color(color).multiplyScalar(0.55);
+    const cHigh = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.22);
+    for (let i = 0; i <= SEG; i++) {
+      const hh = Math.max(6, baseH + amp * (0.55 + 0.45 * Math.sin((i / SEG) * Math.PI * 2 * 3.1 + 1.2) * Math.cos((i / SEG) * Math.PI * 2 * 7.7 + 0.4))
+        + amp * 0.35 * Math.sin((i / SEG) * Math.PI * 2 * 13.3 + 2.1) + amp * 0.18 * Math.sin((i / SEG) * Math.PI * 2 * 27.1));
+      const t = Math.min(1, hh / (baseH + amp));
+      const cl = cLow.clone().lerp(cHigh, t);
+      cols.push(cl.r, cl.g, cl.b, cl.r, cl.g, cl.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: true }));
     return m;
   }
   const hills = new THREE.Group();
@@ -322,40 +372,55 @@ export function buildEnvironment(scene, renderer) {
 
   scene.fog = new THREE.FogExp2(0xbcb0a0, 0.00085);
 
-  const state = { night: 0, target: 0 };
+  const state = { night: 0, target: 0, space: 0 };
 
   const dayZenith = new THREE.Color(0x14498f), dayHorizon = new THREE.Color(0xd3c3a4), dayGround = new THREE.Color(0x4a453b);
   const nightZenith = new THREE.Color(0x04070f), nightHorizon = new THREE.Color(0x13203a), nightGround = new THREE.Color(0x05070b);
 
   function setNight(v) { state.target = v; }
 
-  function update(dt, t) {
+  function update(dt, t, alt) {
     state.night += (state.target - state.night) * Math.min(1, dt * 2.2);
     const n = state.night;
+    // 天空变黑必须慢：真实大气到 60 km 才接近真空黑。
+  // 原来 (alt-1000)/7000 在 8 km 就全黑，导致中段出现一条纯黑真空带。
+  const sp = Math.min(1, Math.max(0, ((alt || 0) - 1500) / 58000));
+    state.space = sp;
+    skyUniforms.uSpace.value = sp;
     const wantEnv = n > 0.5 ? envNight : envDay;
     if (scene.environment !== wantEnv) scene.environment = wantEnv;
     skyUniforms.uZenith.value.copy(dayZenith).lerp(nightZenith, n);
     skyUniforms.uHorizon.value.copy(dayHorizon).lerp(nightHorizon, n);
     skyUniforms.uGround.value.copy(dayGround).lerp(nightGround, n);
     skyUniforms.uNight.value = n;
-    stars.material.uniforms.uOpacity.value = Math.max(0, n * 1.4 - 0.35);
+    stars.material.uniforms.uOpacity.value = Math.max(0, n * 1.4 - 0.35, sp * 1.3);
     sun.intensity = 2.6 * (1 - n * 0.96);
     hemi.intensity = 0.85 * (1 - n * 0.70) + 0.16;
     fill.intensity = 0.45 * (1 - n * 0.85) + 0.10 * n;
     moon.intensity = 0.55 * n;
     scene.fog.color.copy(dayHorizon).lerp(new THREE.Color(0x0a1220), n);
-    scene.fog.density = 0.00085 + n * 0.00045;
+    scene.fog.density = (0.00085 + n * 0.00045) * (1 - sp * 0.985);
+    const gA = 1 - Math.min(1, Math.max(0, ((alt || 0) - 800) / 2600));
+    ground.material.opacity = gA; ground.material.transparent = gA < 1;
+    grid.material.opacity = 0.13 * gA;
+    hills.visible = gA > 0.01;
+    clouds.visible = (alt || 0) < 1500;
     for (const s of spots) s.intensity = 24 + n * 460;
-    ridgeFar.material.color.setHex(n > 0.5 ? 0x10151d : 0x8d8a86);
-    ridgeNear.material.color.setHex(n > 0.5 ? 0x0b1017 : 0x6d6f72);
-    clouds.rotation.y = t * 0.0022;
+    // 顶点色已带山体本色，这里只调亮度乘数：白天 1.0，夜间压到 0.16
+    const ridgeK = 1 - n * 0.84;
+    ridgeFar.material.color.setRGB(ridgeK, ridgeK, ridgeK * 1.02);
+    ridgeNear.material.color.setRGB(ridgeK * 0.94, ridgeK * 0.94, ridgeK * 0.96);
+    if (clouds.visible) clouds.rotation.y = t * 0.0022;
     cloudMat.uniforms.uOpacity.value = 0.95 * (1 - n * 0.97);
     cloudMat.uniforms.uTint.value.setRGB(1, 1 - n * 0.15, 1 - n * 0.3);
     glare.material.opacity = 0.55 * (1 - n * 0.97);
     if (scene.userData.cam) {
-      glare.position.copy(scene.userData.cam.position).addScaledVector(skyUniforms.uSun.value, 1150);
+      const cp = scene.userData.cam.position;
+      // 天空球/星空/云壳跟随相机，避免爬升后穿出外壳
+      sky.position.copy(cp); stars.position.copy(cp); clouds.position.copy(cp);
+      glare.position.copy(cp).addScaledVector(skyUniforms.uSun.value, 1150);
     }
   }
 
-  return { sky, stars, sun, hemi, moon, spots, clouds, glare, setNight, update, state };
+  return { sky, stars, sun, hemi, moon, spots, clouds, glare, ground, grid, hills, setNight, update, state };
 }

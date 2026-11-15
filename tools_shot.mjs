@@ -48,6 +48,9 @@ const send = (method, params) => new Promise(res => { const i = ++id; pending.se
 
 await send('Runtime.enable');
 await send('Page.enable');
+// 必须禁缓存：否则改完 js 复测时拿到的还是上一版，会误判"改动没生效"
+await send('Network.enable');
+await send('Network.setCacheDisabled', { cacheDisabled: true });
 await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
 await send('Page.navigate', { url });
 await sleep(waitMs);

@@ -167,33 +167,46 @@ for name, ay, alen in (("Arm_Low", 20.0, 4.4), ("Arm_Mid", 34.0, 4.4), ("Arm_Hig
     arms.append(ob)
 
 # ---------------------------------------------------------------- rocket
-rk = Batch("Rocket", M_WHITE)
+# Split into stackable nodes so the page can stage-separate / jettison:
+#   Booster_L1..L4  four strap-on boosters (origin at the booster axis base)
+#   Stage1          core first stage + skirt + raceway
+#   Stage2          upper stage + fairing + payload (origin at interstage)
 H_CORE = 46.0
 CORE_R = 2.6
-rk.cyl(CORE_R, H_CORE, (0, H_CORE / 2, 0), seg=24)
-rk.cyl(CORE_R, 3.0, (0, H_CORE + 1.5, 0), seg=24, r2=CORE_R)          # interstage ring
-rk.cyl(3.4, 8.0, (0, H_CORE + 6.5, 0), seg=24, r2=3.4)                # upper stage
-rk.cyl(3.4, 1.0, (0, H_CORE + 11.0, 0), seg=24, r2=3.4)
-rk.cyl(3.4, 9.0, (0, H_CORE + 16.0, 0), seg=24, r2=1.9)               # fairing ogive
-rk.cyl(1.9, 2.2, (0, H_CORE + 21.6, 0), seg=24, r2=0.05)              # nose tip
-# boosters
+STAGE2_Y = 47.5          # interstage plane above the rocket datum
+
+s1 = Batch("Stage1", M_WHITE)
+s1.cyl(CORE_R, H_CORE, (0, H_CORE / 2, 0), seg=28)
+s1.cyl(CORE_R + 0.18, 1.2, (0, 1.6, 0), seg=28)                       # aft skirt ring
+s1.box((0.55, H_CORE - 4, 0.55), (0, H_CORE / 2, -CORE_R - 0.2))      # raceway
 for a in range(4):
     ang = a * math.pi / 2 + math.pi / 4
-    bx, bz = 5.1 * math.cos(ang), 5.1 * math.sin(ang)
-    rk.cyl(1.75, 25.0, (bx, 12.5, bz), seg=20)
-    rk.cyl(1.75, 3.0, (bx, 27.2, bz), seg=20, r2=1.05)                # booster nose
-    rk.cyl(0.6, 1.6, (bx, 29.4, bz), seg=12, r2=0.05)
-# raceway / pipes on the core
-rk.box((0.55, H_CORE - 4, 0.55), (0, H_CORE / 2, -CORE_R - 0.2))
-rk.finish(loc3=(0, ROCKET_BASE, 0))
+    s1.box((0.9, 1.6, 0.9), (CORE_R * math.cos(ang), 40.0, CORE_R * math.sin(ang)))
+s1.finish(loc3=(0, ROCKET_BASE, 0))
+
+s2 = Batch("Stage2", M_WHITE)
+s2.cyl(CORE_R, 3.0, (0, 1.5, 0), seg=28)                              # interstage
+s2.cyl(3.4, 8.0, (0, 7.0, 0), seg=28, r2=3.4)                         # upper stage tank
+s2.cyl(3.4, 1.0, (0, 11.5, 0), seg=28, r2=3.4)
+s2.cyl(3.4, 9.0, (0, 16.5, 0), seg=28, r2=1.9)                        # fairing ogive
+s2.cyl(1.9, 2.2, (0, 22.1, 0), seg=28, r2=0.05)                       # nose tip
+s2.finish(loc3=(0, ROCKET_BASE + STAGE2_Y, 0))
 
 noz = Batch("Rocket_Nozzles", M_BLACK)
-noz.cyl(2.3, 3.2, (0, 1.4, 0), seg=24, r2=1.05)
-for a in range(4):
-    ang = a * math.pi / 2 + math.pi / 4
-    noz.cyl(1.45, 2.6, (5.1 * math.cos(ang), 1.2, 5.1 * math.sin(ang)), seg=18, r2=0.75)
+noz.cyl(2.3, 3.2, (0, 1.4, 0), seg=26, r2=1.05)
 noz.box((CORE_R * 2, 0.8, 0.8), (0, 3.6, 0))
 noz.finish(loc3=(0, ROCKET_BASE, 0))
+
+# four strap-on boosters, each its own node hinged at its own axis
+for i in range(4):
+    ang = i * math.pi / 2 + math.pi / 4
+    bx, bz = 5.1 * math.cos(ang), 5.1 * math.sin(ang)
+    bs = Batch("Booster_L%d" % (i + 1), M_WHITE)
+    bs.cyl(1.75, 25.0, (0, 12.5, 0), seg=22)
+    bs.cyl(1.75, 3.0, (0, 27.2, 0), seg=22, r2=1.05)                  # nose cone
+    bs.cyl(0.6, 1.6, (0, 29.4, 0), seg=12, r2=0.05)                   # tip
+    bs.cyl(1.45, 2.6, (0, -1.0, 0), seg=18, r2=0.75)                  # nozzle (black below)
+    bs.finish(loc3=(bx, ROCKET_BASE, bz))
 
 # ---------------------------------------------------------------- ground support
 tk = Batch("Tanks", M_TANK)
