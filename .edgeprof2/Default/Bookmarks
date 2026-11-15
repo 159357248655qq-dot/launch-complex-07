@@ -1,0 +1,94 @@
+{
+   "checksum": "e65b54aad26638fc13b9cd9df8e69d9a",
+   "roots": {
+      "bookmark_bar": {
+         "children": [ {
+            "children": [  ],
+            "date_added": "13414771647292521",
+            "date_last_used": "0",
+            "date_modified": "13414771647292521",
+            "guid": "d09741c2-a67a-432f-8de3-4103820fad54",
+            "id": "7",
+            "name": "新建文件夹",
+            "source": "unknown",
+            "type": "folder"
+         }, {
+            "date_added": "13435856534131149",
+            "date_last_used": "13436375876993429",
+            "guid": "6cdbc299-ec99-4b3c-a6cf-cb9f00d82fa0",
+            "id": "8",
+            "name": "御航new中转站",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://new.loadix.cn/keys",
+            "visit_count": 10
+         }, {
+            "date_added": "13435856538873047",
+            "date_last_used": "13438277754286084",
+            "guid": "2a7a3f20-7639-4a8d-9820-aa166676bded",
+            "id": "9",
+            "name": "御航new中转站",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://new.loadix.cn/keys",
+            "visit_count": 11
+         }, {
+            "date_added": "13436358762288907",
+            "date_last_used": "13438694300626220",
+            "guid": "a1bfcf07-9974-4bca-a86a-22f8a3fd1793",
+            "id": "10",
+            "name": "GitHub",
+            "show_icon": false,
+            "source": "sync",
+            "type": "url",
+            "url": "https://github.com/",
+            "visit_count": 8
+         } ],
+         "date_added": "13439221407023698",
+         "date_last_used": "0",
+         "date_modified": "13436358762288907",
+         "guid": "0bc5d13f-2cba-5d74-951f-3f233fe6c908",
+         "id": "1",
+         "name": "收藏夹栏",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "other": {
+         "children": [  ],
+         "date_added": "13439221407023698",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "82b081ec-3dd3-529c-8475-ab6c344590dd",
+         "id": "2",
+         "name": "其他收藏夹",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [  ],
+         "date_added": "13439221407023698",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "4cf2e351-0e85-532b-bb37-df045d8f8d0f",
+         "id": "3",
+         "name": "移动收藏夹",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "workspaces_v2": {
+         "children": [  ],
+         "date_added": "13439221407023698",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "75aa6670-344f-549d-b742-660f029506ab",
+         "id": "5",
+         "name": "工作区",
+         "source": "unknown",
+         "type": "folder"
+      }
+   },
+   "sync_metadata": "CjEKDgiIgQISCCAkTd+hAQAAEgAqGCtXWVZEUktpclJVbUR1UXM4b1ZkL1E9PUgDoAYJEowBCAUShwEKHHdSQnJaTCs2UEE5YXZLZ2pOUDdKWERMY2Z2cz0SJGU1MTkzODhlLTg4NmYtNTA0MC1hYTk5LTgzMmQ4ODRhOTk1MRgAIAAoADDSoZODoDM4saeTg6AzQLGnk4OgM0ocbm14NjVzUUR2eEk4VGdFZXYrQStudHRvU240PWUAAAAAwj4CYAASjAEIAxKHAQocbmpnRHU4OGVDcnZYcDg2cEQ3ZkhHY3FGcDg4PRIkZDA1ZGJjYzctNzE5OS01ZGJhLTgyNGQtZTBkZjBlMjc5YjY1GAAgACgAMNOhk4OgMzjfp5ODoDNA36eTg6AzShx5ek5CMDFjbjU0QTdjUlUwdVQrL1BnbVR0VW89ZQAAAADCPgJgABKsAQgHEqcBChxKS0Q3MjFxckxTWnBXWCtZanNHZXpjbktna289EiRkMDk3NDFjMi1hNjdhLTQzMmYtOGRlMy00MTAzODIwZmFkNTQYACAAKAAwr7C788kzOKu8u/PJM0CrvLvzyTNKHDhyOGlDMWxCcDNWakR3WnRZZzViSytJSk9Taz1aHiIcanhHRGMwcGpDR2UzeHdVUHFPOHVJeU5vblY4PWUAAAAAwj4CYAASrQEIChKoAQocWm5FbEdNZUEvZjJ1R1FvWUxxUFBhWEV1NzJvPRIkYTFiZmNmMDctOTk3NC00YmNhLWE4NmEtMjJmOGEzZmQxNzkzGAAgACgAMPb3jP+bNDj7iLelkzRA+4i3pZM0ShxaNVppSXJMd08xT3hFNjNQVnpWN0wrb1FWbkE9Wh8iHfZpT1FHK085SW4wc2lkUDltUXpVWkNCYkpFVFE9ZYVn7Q/CPgJgBRKtAQgJEqgBChxCeGVraWliQUYzTFJhRWp6YzEzYVp2K3IxeEk9EiQyYTdhM2YyMC03NjM5LTRhOGQtOTgyMC1hYTE2NjY3NmJkZWQYACAAKAAw+9/9j5s0OKrz9IKTNECq8/SCkzRKHEdiajN4UjRya242Q3Z0TWJGQ1RvSDlOeDVjdz1aHyId7U9HbFI0YkFKWVFkUkNnL2JONTRMR2djbWZZVT1lgTezM8I+AmAFEq0BCAgSqAEKHHlmUGNxZHBldC9xTHlib1h6YkpQWEhyVTZEMD0SJDZjZGJjMjk5LWVjOTktNGIzYy1hNmNmLWNiOWYwMGQ4MmZhMBgAIAAoADD83/2PmzQ4yfL0gpM0QMny9IKTNEoccDhiTmdjWHNwRXBKZWd3WU01RDc5ajhrRXhZPVofIh3abGFYQXlZUjRqRHN6Q3VtZzRZSytWR0dIUUpvPWWBN7Mzwj4CYAUSjAEIARKHAQoceXhKLzZmdmtlY3I3a3A1RVF6QjR0V0xwZGJFPRIkMTFiM2EyZjgtOWFkMC01N2FjLTgzYWEtYmY1NzQzOTNkNjdlGAAgACgAMMyhk4OgMziippODoDNAoqaTg6AzShxhUkNXTGdoRjliNUlucUtJRHZ1Si9qdlFrRmM9ZQAAAADCPgJgABKMAQgCEocBChxZY1NUb252RVNQd3FDczRMMmNyVmh2NjhMOTg9EiQ0OWQxNzg1NS0xNmU3LTVmNDUtYWJhZS04Yjk2NGU3MGEyNTUYACAAKAAwzaGTg6AzONGmk4OgM0DRppODoDNKHG9QVmtod0JSYlY2NUtDV1IyK0lPTkhXb091OD1lAAAAAMI+AmAAMAA4AA==",
+   "version": 1
+}
