@@ -86,14 +86,17 @@ class Smoke {
     scene.add(this.points);
   }
 
-  emit(x, y, z, spread, up, life, size, tint, fade) {
+  // dir：可选的方向初速 [vx,vy,vz]。导流槽焰流必须沿槽道喷出去，
+  // 只靠 spread 随机扩散的话粒子原地堆成一团，看起来像冒火花的棉花糖。
+  emit(x, y, z, spread, up, life, size, tint, fade, dir) {
     const i = this.cursor = (this.cursor + 1) % this.count;
     this.pos[i * 3] = x + (Math.random() - 0.5) * spread;
     this.pos[i * 3 + 1] = y + Math.random() * spread * 0.4;
     this.pos[i * 3 + 2] = z + (Math.random() - 0.5) * spread;
-    this.vel[i * 3] = (Math.random() - 0.5) * spread * 1.6;
-    this.vel[i * 3 + 1] = up * (0.55 + Math.random() * 0.9);
-    this.vel[i * 3 + 2] = (Math.random() - 0.5) * spread * 1.6;
+    const dv = dir ? dir[0] : 0, dv2 = dir ? dir[2] : 0;
+    this.vel[i * 3] = (Math.random() - 0.5) * spread * 1.6 + dv * (0.7 + Math.random() * 0.6);
+    this.vel[i * 3 + 1] = up * (0.55 + Math.random() * 0.9) + (dir ? dir[1] * (0.7 + Math.random() * 0.6) : 0);
+    this.vel[i * 3 + 2] = (Math.random() - 0.5) * spread * 1.6 + dv2 * (0.7 + Math.random() * 0.6);
     this.life[i] = 0.0001;
     this.ttl[i] = life * (0.7 + Math.random() * 0.6);
     this.base[i] = size * (0.6 + Math.random() * 0.8);
@@ -128,13 +131,45 @@ class Smoke {
   }
 }
 
-function flameCone(r, h, color, order) {
+// 尾焰锥：MeshBasicMaterial 是纯色填充，锥体边缘是硬边多边形，远看像一片纸。
+// 用沿高度 + 沿半径双重衰减的自定义 shader，才有火柱的体积感。
+// 尾焰用锥壳 + 三重衰减：沿轴（越远越淡）、沿周（轮廓柔化，不是硬多边形边）、
+// 沿视角（正对视线最厚）。注意不要用 |dot(N,V)| 单独当透明度——薄锥侧面从侧面看
+// 法线恒垂直于视线，会让整根火柱彻底消失；这里只把它当权重的一部分（mix 到 0.45）。
+// 颜色分三段：喷口白芯 → 中段饱和橙 → 尾端暗红（燃烧产物冷却）。
+const FLAME_VERT = ['varying vec2 vUv;', 'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }'].join('\n');
+const FLAME_FRAG = [
+  'uniform vec3 uColor;',
+  'uniform float uOpacity;',
+  'uniform float uCore;',
+  'uniform float uFall;',
+  'varying vec2 vUv;',
+  'void main(){',
+  '  float t = vUv.y;',                                  // 0 = 喷口，1 = 尾端
+  '  float along = pow(max(0.0, 1.0 - t), uFall);',      // 沿轴衰减
+  // uv.x 沿圆周：靠近 ±0.5 处是锥面轮廓，压暗后边缘自然虚化
+  '  float edge = smoothstep(0.0, 0.30, abs(0.5 - vUv.x) * 2.0 * 0.5 + 0.5);',
+  '  float a = uOpacity * along * mix(0.45, 1.0, edge);',
+  '  if (a < 0.004) discard;',
+  '  float hot = uCore * pow(max(0.0, 1.0 - t * 3.6), 2.0);',   // 白芯只在喷口附近
+  '  vec3 c = mix(uColor, vec3(1.0, 0.95, 0.82), hot * 0.62);',
+  '  c = mix(c, c * vec3(1.0, 0.58, 0.30), smoothstep(0.40, 1.0, t) * 0.62);',  // 尾端冷却偏红
+  '  gl_FragColor = vec4(c, a);',
+  '}'
+].join('\n');
+
+function flameCone(r, h, color, order, core, fall) {
   const geo = new THREE.ConeGeometry(1, 1, 32, 1, true);
   geo.rotateX(Math.PI);
   geo.translate(0, -0.5, 0);
-  const mat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) }, uOpacity: { value: 0 },
+      uCore: { value: core || 0 }, uFall: { value: fall || 1.7 }
+    },
+    vertexShader: FLAME_VERT, fragmentShader: FLAME_FRAG,
+    transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide
   });
   const m = new THREE.Mesh(geo, mat);
   m.renderOrder = order;
@@ -177,9 +212,11 @@ export class LaunchSequence {
 
     // ---- 尾焰 ----
     const base = ROCKET_BASE;
-    this.plume = flameCone(1, 1, 0xff6a12, 4);
-    this.mid = flameCone(1, 1, 0xffab4a, 4.5);
-    this.core = flameCone(1, 1, 0xfff6e8, 5);
+    // 三层颜色拉开色相：外层暗橙、中层饱和橙、内层暖白。三层都是加色混合，
+    // 只要其中任何一层接近纯白，叠加后整根火柱就会过曝成白柱。
+    this.plume = flameCone(1, 1, 0xff4d08, 4, 0, 2.0);
+    this.mid = flameCone(1, 1, 0xff8c22, 4.5, 0, 2.5);
+    this.core = flameCone(1, 1, 0xffd79a, 5, 1.0, 3.4);
     // 尾焰挂在 root 下：root 会做重力转向倾斜，尾焰必须跟着箭体转，否则会脱开箭体
     for (const m of [this.plume, this.mid, this.core]) { m.position.set(0, base - 1.2, 0); this.root.add(m); }
 
@@ -187,9 +224,8 @@ export class LaunchSequence {
     this.bPlumes = [];
     for (let i = 0; i < 4; i++) {
       const ang = i * Math.PI / 2 + Math.PI / 4;
-      const p = flameCone(1, 1, 0xffa855, 4);
+      const p = flameCone(1, 1, 0xff7d1c, 4, 0, 2.3);
       p.position.set(5.1 * Math.cos(ang), base - 1.4, 5.1 * Math.sin(ang));
-      p.material.color.setHex(0xffb055);
       this.root.add(p);
       this.bPlumes.push(p);
     }
@@ -201,12 +237,18 @@ export class LaunchSequence {
     this.glow.scale.set(30, 30, 1);
     this.root.add(this.glow);
 
-    this.splash = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffa855, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    this.splash.position.set(0, 3.2, 0);
-    this.splash.scale.set(60, 20, 1);
+    // 台面反光斑：必须是贴地平面。Sprite 永远正对相机，会读成一块悬空的黄椭圆贴片。
+    this.splash = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: glowTex, color: 0xff7a28, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+    );
+    this.splash.rotation.x = -Math.PI / 2;
+    this.splash.position.set(0, 12.3, 0);
+    this.splash.scale.set(60, 60, 1);
+    this.splash.renderOrder = 7;
     scene.add(this.splash);
 
-    this.engineLight = new THREE.PointLight(0xffa64d, 0, 320, 2);
+    this.engineLight = new THREE.PointLight(0xff9033, 0, 260, 2);
     this.engineLight.position.set(0, base - 4, 0);
     this.root.add(this.engineLight);
   }
@@ -236,7 +278,7 @@ export class LaunchSequence {
     this.root.position.set(0, 0, 0);
     this.root.rotation.set(0, 0, 0);
     this.root.visible = true;
-    for (const m of [this.plume, this.mid, this.core, ...this.bPlumes]) m.material.opacity = 0;
+    for (const m of [this.plume, this.mid, this.core, ...this.bPlumes]) m.material.uniforms.uOpacity.value = 0;
     this.glow.material.opacity = 0;
     this.splash.material.opacity = 0;
     this.engineLight.intensity = 0;
@@ -330,34 +372,46 @@ export class LaunchSequence {
 
     // 真空段：羽流膨胀但整体变暗（没有大气散射，光不会外溢）
     const vacDim = 1 - vac * 0.42;
-    this.plume.material.opacity = th * (0.40 + vac * 0.10) * vacDim;
-    this.mid.material.opacity = th * 0.62 * vacDim;
-    this.core.material.opacity = th * (1.0 - vac * 0.55);
+    // 加色混合下三层会直接相加：0.26 + 0.34 + 0.55 ≈ 1.15 已经过 1，
+    // 再加 glow 精灵与 bloom 就会被 ACES 压成纯白。所以每层都留在 0.6 以下。
+    // 加色混合下 4 支助推 + 芯级共 7 个锥会直接相加：每层都必须压到很低，
+    // 否则总和过 1 后被 ACES 拉成纯白 —— 之前那根白柱就是这么来的。
+    this.plume.material.uniforms.uOpacity.value = th * (0.40 + vac * 0.06) * vacDim;
+    this.mid.material.uniforms.uOpacity.value = th * 0.52 * vacDim;
+    this.core.material.uniforms.uOpacity.value = th * (0.80 - vac * 0.42);
     // 真空段羽流：横向膨胀、纵向反而收短（真实上面级羽流是宽而短的伞状，不是长火柱）
-    const w = 4.4 + th * 2.8, hh = 13 + th * 10;
-    this.plume.scale.set(w * thin * (1 + vac * 1.15), hh * (1 - vac * 0.28), w * thin * (1 + vac * 1.15));
-    this.mid.scale.set((2.8 + th * 1.8) * thin * (1 + vac * 0.85), (9 + th * 6.5) * (1 - vac * 0.30), (2.8 + th * 1.8) * thin * (1 + vac * 0.85));
-    this.core.scale.set((1.35 + th * 0.95) * thin * (1 + vac * 0.5), (5.6 + th * 3.8) * (1 - vac * 0.25), (1.35 + th * 0.95) * thin * (1 + vac * 0.5));
+    // 真空羽流不是"撑开的伞"：二级发动机排出的气体近乎透明，横向膨胀要收敛，
+    // 纵向迅速散开，整体尺寸比大气段小得多，否则整根火柱会变成一个橙色漏斗。
+    const w = (4.4 + th * 2.8) * (1 - vac * 0.62), hh = (13 + th * 10) * (1 - vac * 0.55);
+    this.plume.scale.set(w * thin * (1 + vac * 0.35), hh, w * thin * (1 + vac * 0.35));
+    this.mid.scale.set((2.8 + th * 1.8) * (1 - vac * 0.60) * thin * (1 + vac * 0.30), (9 + th * 6.5) * (1 - vac * 0.52), (2.8 + th * 1.8) * (1 - vac * 0.60) * thin * (1 + vac * 0.30));
+    this.core.scale.set((1.35 + th * 0.95) * (1 - vac * 0.55) * thin, (5.6 + th * 3.8) * (1 - vac * 0.48), (1.35 + th * 0.95) * (1 - vac * 0.55) * thin);
     // 高空收敛：真空段没有大气散射，光晕必须收小，否则糊成白盘
     const glowK = Math.max(0.0, 1 - this.altitude / 3200);
-    this.glow.material.opacity = th * 0.95 * glowK;
-    this.glow.scale.setScalar((22 + th * 16 + Math.random() * 3) * (0.25 + glowK * 0.75));
+    this.glow.material.opacity = th * 0.55 * glowK;
+    this.glow.scale.setScalar((15 + th * 9 + Math.random() * 2) * (0.25 + glowK * 0.75));
 
     const near = Math.max(0, 1 - this.altitude / 90);
-    this.splash.material.opacity = th * 0.55 * near;
-    this.splash.scale.set(58 + th * 16, 18 + th * 6, 1);
+    // 贴地光斑：加色一旦超过 0.4 就被 ACES 推成黄白硬圆盘，压到 0.3 以内。
+    // 平面在 XZ 上展开，scale.x/z 才是它的直径（scale.y 无意义）。
+    this.splash.material.opacity = th * 0.28 * near;
+    const sd = 52 + th * 22;
+    this.splash.scale.set(sd, sd, 1);
 
     for (let i = 0; i < this.bPlumes.length; i++) {
       const p = this.bPlumes[i];
       const alive = this.separated.boosters ? 0 : 1;
       p.visible = alive > 0;
-      p.material.opacity = th * 0.42;
+      p.material.uniforms.uOpacity.value = th * 0.30;
       p.position.y = base - 1.4;
       p.scale.set(1.9 + th * 0.9, 7.5 + th * 3.4, 1.9 + th * 0.9);
     }
 
     this.engineLight.position.y = base - 2;
-    this.engineLight.intensity = th * (600 + vac * 900);
+    // 600 的强度把整个箭体照成一根白柱（这才是"箭体发白"的真凶，不是材质问题）
+    // 190 的强度把箭体下半截照成无彩灰白（实测 body_mid mean 148、44% 像素 >200）。
+    // 点光按 1/d² 衰减，喷口附近 15 m 处的照度是远景的几十倍，必须留余量。
+    this.engineLight.intensity = th * (46 + vac * 34);
 
     // ---- 排气粒子 ----（粒子在 scene 世界坐标下，需补上视觉高度 ra）
     const wbase = base + ra;
@@ -380,17 +434,29 @@ export class LaunchSequence {
       }
       if (this.altitude < 14) {
         // 地面翻滚烟云：真实发射在台面四周会摊开成直径百米的低矮云团
-        for (let i = 0; i < Math.round(26 * this.density); i++) {
-          const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 26;
+        // 尺寸 26 + fade 0.34 会在台面糊成一整块过曝白饼，把箭体和台架全盖掉。
+        // 真实夜发是"被火照亮的暖灰云团"，压小压暗才看得出体积。
+        for (let i = 0; i < Math.round(14 * this.density); i++) {
+          const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 26;
+          const spd = 16 + Math.random() * 22;
           this.smoke.emit(Math.cos(a) * r, 2 + Math.random() * 6, Math.sin(a) * r,
-            10 + Math.random() * 8, 3.4, 10 + Math.random() * 8, 26, [0.80, 0.78, 0.75], 0.34);
+            10 + Math.random() * 8, 2.0, 9 + Math.random() * 7, 15,
+            [0.66, 0.63, 0.60], 0.15, [Math.cos(a) * spd, 0, Math.sin(a) * spd]);
         }
+        // 导流槽沿 Z 轴开挖，焰流从 z=±23 两个槽口向南北喷出；
+        // 之前写在 X 轴上，火从侧面平白冒出来，和槽口完全对不上。
         for (let sd = -1; sd <= 1; sd += 2) {
-          const n = Math.round((18 + this.throttle * 18) * this.density);
+          // 烟团走 NormalBlending：20+ 颗叠在一起 alpha 会累加到接近 1，橙色被冲成白。
+          // 减数量 + 降 fade + 提高饱和度，才是"被火照亮的橙色焰流"而不是白雾。
+          // 数量/尺寸/寿命是实测调出来的：264 颗 80px 的橙色粒子叠在箭体正下方，
+          // 相机的 +Z 视线把朝相机喷的槽口焰流透视压成一整块橙黄圆斑。
+          // 小颗粒 + 低 alpha + 短寿命 + 更快出射，才会读成"两股向外甩的焰流"。
+          const n = Math.round((7 + this.throttle * 6) * this.density);
           for (let i = 0; i < n; i++) {
-            const ex = sd * (16 + Math.random() * 16);
-            const ez = (Math.random() - 0.5) * 10;
-            this.smoke.emit(ex, 1.2 + Math.random() * 6, ez, 3.6, 3.2, 3.6, 13, [1.0, 0.72, 0.34], 0.62);
+            const ez = sd * (19 + Math.random() * 10);
+            const ex = (Math.random() - 0.5) * 14;
+            this.smoke.emit(ex, 1.0 + Math.random() * 5, ez, 3.6, 2.2, 1.5, 6.5,
+              [1.0, 0.50, 0.13], 0.085, [0, 1.6, sd * (62 + Math.random() * 52)]);
           }
         }
       }

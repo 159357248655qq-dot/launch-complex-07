@@ -3,6 +3,14 @@ __pycache__/
 *.pyc
 .edgeprof2/
 .edgeprof/
+.edgetmp_*/
 out_*.png
 _*.js
 _*.py
+_*.png
+_*.mjs
+_*.sh
+_syn/
+_synx/
+fin_*.png
+docs/screenshots/*.tmp.png

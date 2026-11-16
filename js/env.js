@@ -27,7 +27,8 @@ const SKY_FRAG = [
   '  float t = pow(1.0 - clamp(h / 0.20, 0.0, 1.0), 2.4);',
   '  vec3 col = mix(uZenith, haze, t);',
   '  col *= (1.0 - 0.965 * uSpace);',
-  '  col = mix(uGround * (1.0 - 0.96 * uSpace), col, smoothstep(-0.08, 0.01, h));',
+  // 高空直视时地平线以下必须是纯黑（那是太空，不是地面），否则会留一条棕色带
+  '  col = mix(uGround * (1.0 - 0.96 * uSpace) * (1.0 - uSpace), col, smoothstep(-0.08, 0.01, h));',
   '  float sd = max(dot(dir, sd3), 0.0);',
   '  col += uSunColor * pow(sd, 9000.0) * 1.35 * (1.0 - uNight);',
   '  col += uSunColor * pow(sd, 26.0) * 0.16 * (1.0 - uNight * 0.88);',
@@ -37,6 +38,21 @@ const SKY_FRAG = [
   '  float md = max(dot(dir, moonDir), 0.0);',
   '  col += vec3(0.55, 0.68, 0.95) * pow(md, 260.0) * 0.55 * uNight;',
   '  col += vec3(0.10, 0.16, 0.30) * pow(md, 8.0) * 0.20 * uNight;',
+  // 星空：直接在天球方向里按格子撒点。比独立 Points 点云可靠 —— 点云受',
+  // 点尺寸/驱动裁剪影响，实测在这个场景里一个像素都画不出来。',
+  '  vec2 sph = vec2(atan(dir.z, dir.x), asin(clamp(dir.y, -1.0, 1.0)));',
+  '  vec2 g = sph * 150.0;',
+  '  vec2 id = floor(g);',
+  '  vec2 f = fract(g) - 0.5;',
+  '  float r1 = fract(sin(dot(id, vec2(127.1, 311.7))) * 43758.5453);',
+  '  float r2 = fract(sin(dot(id, vec2(269.5, 183.3))) * 43758.5453);',
+  '  float r3 = fract(sin(dot(id, vec2(419.2, 371.9))) * 43758.5453);',
+  '  vec2 offs = (vec2(r2, r3) - 0.5) * 0.66;',
+  '  float sd2 = length(f - offs);',
+  '  float rad = 0.16 + r3 * 0.20;',
+  '  float star = smoothstep(rad, rad * 0.10, sd2) * step(0.72, r1);',
+  '  float starVis = max(uSpace, uNight * 0.85) * smoothstep(-0.02, 0.10, h);',
+  '  col += vec3(0.82, 0.88, 1.0) * star * starVis * (0.55 + r2 * 0.85) * 1.15;',
   '  gl_FragColor = vec4(col, 1.0);',
   '}'
 ].join('\n');
@@ -191,8 +207,8 @@ export function buildEnvironment(scene, renderer) {
   starGeo.setAttribute('aSize', new THREE.BufferAttribute(sz, 1));
   const stars = new THREE.Points(starGeo, new THREE.ShaderMaterial({
     uniforms: { uOpacity: { value: 0 } },
-    vertexShader: ['attribute float aSize;', 'varying float vS;', 'void main(){ vS = aSize;', 'vec4 mv = modelViewMatrix * vec4(position,1.0);', 'gl_PointSize = aSize * 2.2;', 'gl_Position = projectionMatrix * mv; }'].join('\n'),
-    fragmentShader: ['uniform float uOpacity;', 'varying float vS;', 'void main(){', 'vec2 d = gl_PointCoord - vec2(0.5);', 'float a = smoothstep(0.5, 0.0, length(d));', 'gl_FragColor = vec4(vec3(0.85,0.9,1.0), a * uOpacity * 0.9); }'].join('\n'),
+    vertexShader: ['attribute float aSize;', 'varying float vS;', 'void main(){ vS = aSize;', 'vec4 mv = modelViewMatrix * vec4(position,1.0);', 'gl_PointSize = aSize * 4.4;', 'gl_Position = projectionMatrix * mv; }'].join('\n'),
+    fragmentShader: ['uniform float uOpacity;', 'varying float vS;', 'void main(){', 'vec2 d = gl_PointCoord - vec2(0.5);', 'float a = smoothstep(0.5, 0.06, length(d));', 'gl_FragColor = vec4(vec3(1.0), a * uOpacity); }'].join('\n'),
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
   }));
   stars.frustumCulled = false;
@@ -413,7 +429,9 @@ export function buildEnvironment(scene, renderer) {
     if (clouds.visible) clouds.rotation.y = t * 0.0022;
     cloudMat.uniforms.uOpacity.value = 0.95 * (1 - n * 0.97);
     cloudMat.uniforms.uTint.value.setRGB(1, 1 - n * 0.15, 1 - n * 0.3);
-    glare.material.opacity = 0.55 * (1 - n * 0.97);
+    // 太阳眩光要随进入太空淡掉：大气散射没了，太阳只剩一个小而硬的圆盘，
+    // 否则那团暖色光晕会把整片星空染成棕色。
+    glare.material.opacity = 0.55 * (1 - n * 0.97) * (1 - sp * 0.94);
     if (scene.userData.cam) {
       const cp = scene.userData.cam.position;
       // 天空球/星空/云壳跟随相机，避免爬升后穿出外壳

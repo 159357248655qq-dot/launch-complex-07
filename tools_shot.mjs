@@ -10,11 +10,18 @@ const W = Number(process.argv[5] || 1440), H = Number(process.argv[6] || 810);
 let evalJs = process.argv[7] || '';
 if (evalJs.startsWith('@')) evalJs = fs.readFileSync(evalJs.slice(1), 'utf8');
 
+// 端口每次随机：上一轮残留的 Edge 会继续占着 9333，新进程连上去就是旧页面，
+// 表现为「改了代码复测没变化」或截图任务直接卡死。
+const PORT = 9400 + Math.floor(Math.random() * 400);
 const proc = spawn(EDGE, [
-  '--headless=new', '--remote-debugging-port=9333', '--user-data-dir=' + ROOT + '/.edgeprof2',
+  '--headless=new', '--remote-debugging-port=' + PORT,
+  // 每次用全新的临时 profile：复用固定目录会被上一轮残留的 Edge 锁住，进程直接启动失败
+  '--user-data-dir=' + ROOT + '/.edgetmp_' + PORT,
   '--no-first-run', '--no-default-browser-check', '--disable-extensions',
   '--disable-gpu', '--enable-unsafe-swiftshader', '--use-angle=swiftshader',
-  '--hide-scrollbars', '--window-size=' + W + ',' + H, 'about:blank'
+  '--hide-scrollbars', '--window-size=' + W + ',' + H,
+  // 无头下让 AudioContext 无需手势即可 running，才能验证音频链路真的在出声
+  '--autoplay-policy=no-user-gesture-required', 'about:blank'
 ], { stdio: 'ignore' });
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -22,7 +29,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function targets() {
   for (let i = 0; i < 60; i++) {
     try {
-      const r = await fetch('http://127.0.0.1:9333/json/list');
+      const r = await fetch('http://127.0.0.1:' + PORT + '/json/list');
       const j = await r.json();
       const p = j.find(t => t.type === 'page');
       if (p) return p;
@@ -66,6 +73,9 @@ fs.writeFileSync(outFile, Buffer.from(shotRes.result.data, 'base64'));
 console.log('SAVED ' + outFile);
 console.log(logs.slice(0, 40).join('\n') || 'no-logs');
 ws.close();
+// Edge 会派生一堆子进程，只 kill 父进程会留下僵尸占着 profile 与端口
+try { spawn('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (e) {}
 proc.kill('SIGKILL');
-await sleep(300);
+await sleep(700);
+try { fs.rmSync(ROOT + '/.edgetmp_' + PORT, { recursive: true, force: true }); } catch (e) {}
 process.exit(0);

@@ -120,7 +120,8 @@ export class LaunchAudio {
     windBP.frequency.value = 520;
     windBP.Q.value = 0.55;
     const windGain = ctx.createGain();
-    windGain.gain.value = 0.055;
+    // 0.055 实测只有 -44.7 dB，等于没声；发射场待机必须能听见海风与远处人声环境
+    windGain.gain.value = 0.24;
     wind.connect(windBP).connect(windGain);
     send(windGain, 0.35);
     wind.start();
@@ -364,7 +365,8 @@ export class LaunchAudio {
 
     // 大气越稀薄，燃烧声越干净、轰鸣越弱
     const air = Math.max(0.06, Math.exp(-alt / 26000));
-    const wind = 0.05 + 0.03 * (1 - air);
+    // 待机底噪要可闻（-30 dB 量级），起飞后被发动机压下去
+    const wind = 0.20 + 0.07 * (1 - air);
 
     b.windGain.gain.setTargetAtTime(wind * (1 - th * 0.78), t, k);
     b.rumbleGain.gain.setTargetAtTime(th * 0.92 * (0.32 + 0.68 * air), t, k);
@@ -411,7 +413,7 @@ export class LaunchAudio {
       const sec = Math.ceil(s.countdown);
       if (sec !== this.lastBeep && sec <= 10 && sec > 0) {
         this.lastBeep = sec;
-        this.beep(sec <= 3 ? 1180 : 880, 0.13, sec <= 3 ? 0.15 : 0.10);
+        this.beep(sec <= 3 ? 1180 : 880, 0.15, sec <= 3 ? 0.30 : 0.20);
       }
       if (s.countdown < 0) this.lastBeep = -1;
     }

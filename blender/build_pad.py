@@ -102,13 +102,23 @@ for sx in (-1, 1):
     for sz in (-1, 1):
         pad.box((2.2, MOUNT_TOP - PAD_TOP, 2.2),
                 (sx * 6.0, PAD_TOP + (MOUNT_TOP - PAD_TOP) / 2, sz * 6.0))
-pad.box((17, 1.4, 17), (0, MOUNT_TOP + 0.7, 0))
-pad.box((13, 1.0, 13), (0, MOUNT_TOP + 1.6, 0))
-pad.box((7.4, 1.2, 7.4), (0, MOUNT_TOP + 2.4, 0))
+# 发射台架：中间必须开孔。真实发射台火箭下方是排气通道，实心台面会把
+# 尾焰和烟整个压在板下 —— 这就是之前怎么调 shader 都看不见尾焰的根因。
+# 台架顶面必须正好等于 MOUNT_TOP(=12.0)，箭底在 12.6，压到板上就看不见喷口了
+HOLE = 12.0                     # 中央排气口尺寸（尾焰底径约 11 m，必须能穿过）
+for sz in (-1, 1):               # 前后两根横梁
+    pad.box((17, 1.4, (17 - HOLE) / 2), (0, MOUNT_TOP - 0.7, sz * (HOLE + (17 - HOLE) / 2) / 2))
+for sx in (-1, 1):               # 左右两根纵梁
+    pad.box(((17 - HOLE) / 2, 1.4, HOLE), (sx * (HOLE + (17 - HOLE) / 2) / 2, MOUNT_TOP - 0.7, 0))
+# 下层加强环，同样留出排气口
+for sz in (-1, 1):
+    pad.box((13, 1.0, (13 - HOLE) / 2), (0, MOUNT_TOP - 1.9, sz * (HOLE + (13 - HOLE) / 2) / 2))
+for sx in (-1, 1):
+    pad.box(((13 - HOLE) / 2, 1.0, HOLE), (sx * (HOLE + (13 - HOLE) / 2) / 2, MOUNT_TOP - 1.9, 0))
 # hold-down clamps
 for a in range(8):
     ang = a * math.pi / 4
-    pad.box((1.5, 2.6, 1.5), (3.6 * math.cos(ang), MOUNT_TOP + 3.2, 3.6 * math.sin(ang)))
+    pad.box((1.5, 2.6, 1.5), (3.6 * math.cos(ang), MOUNT_TOP + 1.3, 3.6 * math.sin(ang)))
 pad.finish()
 
 # ---------------------------------------------------------------- tower

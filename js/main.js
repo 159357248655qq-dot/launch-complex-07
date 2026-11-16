@@ -275,20 +275,25 @@ function updateFollow(dt) {
   //   k=1：dist 180 / 相机 ra+77 / 目标 ra-25，fov 74 —— 箭体在中心上方 18.5°，
   //        地球边缘在中心下方 29.6°，两者同框
   // 近地段箭体是满箭 92 m，必须比太空段退得更远；随级间分离逐步推近
-  const dist = 200 - k * 20;
+  // 数值反解（_frame3.mjs 网格搜索，目标：箭顶 NDC≈0.74、箭底≈0.40、
+  // 地球弧形地平线≈0.00）得到 k=1 时 dist=150 / lift=+100 / 注视点=箭顶下方、fov=68。
+  // k=0 端沿用已验证的近景参数，避免起飞段构图回退。
+  const dist = 200 - k * 50;
   followAz += dt * (0.055 + k * 0.025);
   const az = followAz + 0.9;
 
-  // 相机与目标都抬到箭体中段附近，避免"从下往上拍"把箭顶推出画面
-  const lift = 40 + k * 37;
+  // 相机与目标抬到箭体中段附近，避免"从下往上拍"把箭顶推出画面
+  const lift = 40 + k * 60;
   followPos.set(Math.cos(az) * dist, ra + lift, Math.sin(az) * dist);
 
-  followTgt.set(0, ra + 46 - k * 71, 0);
+  // 太空段注视点收到箭体自身高度并让镜头俯视，地球弧形地平线正好落在画面中线，
+  // 二级悬在地球曲率上方 —— 这是"从太空回望"的经典构图。
+  followTgt.set(0, ra + 46 - k * 46, 0);
 
   // 补光随太空揭示强度升起，方向跟着相机（永远照到朝向观众的一面）
   const fill = Math.min(1, Math.max(0, (ra - 500) / 1200));
-  spaceFill.intensity = fill * 3.2;
-  spaceFill2.intensity = fill * 1.4;
+  spaceFill.intensity = fill * 1.05;
+  spaceFill2.intensity = fill * 0.45;
   tmpV.copy(camera.position).sub(controls.target).normalize();
   spaceFill.position.copy(controls.target).addScaledVector(tmpV, 200);
   spaceFill.target.position.copy(controls.target);
@@ -298,7 +303,7 @@ function updateFollow(dt) {
   // 线性插值在 133 m/s 时会滞后约 63 m，直接把箭顶推出画面。
   camera.position.lerp(followPos, 1 - Math.exp(-dt * 8.0));
   controls.target.lerp(followTgt, 1 - Math.exp(-dt * 9.0));
-  const wantFov = 46 + k * 28;                            // 46 → 74 广角容纳地球弧线
+  const wantFov = 46 + k * 22;                            // 46 → 68：广角同时容纳箭体与地球弧线
   camera.fov += (wantFov - camera.fov) * (1 - Math.exp(-dt * 3.0));
   camera.updateProjectionMatrix();
 }

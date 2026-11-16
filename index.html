@@ -82,14 +82,20 @@
   .legend .d { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 
   /* 事件提示 */
-  #note { position: fixed; left: 50%; top: 15%; transform: translate(-50%, -8px); z-index: 6;
-    font-size: 15px; letter-spacing: .30em; color: #ffd9b8; opacity: 0; transition: opacity .35s, transform .35s;
-    text-shadow: 0 0 22px rgba(255,138,61,.7), 0 2px 10px rgba(0,0,0,.9); pointer-events: none; }
-  #note.on { opacity: 1; transform: translate(-50%, 0); }
+  /* 原来居中 15% 会正好压在火箭上——移到左侧标题下方，避开主体 */
+  #note { position: fixed; left: 24px; top: 104px; z-index: 6;
+    font-size: 13px; letter-spacing: .26em; color: #ffd9b8; opacity: 0; transition: opacity .35s, transform .35s;
+    transform: translateY(-6px);
+    text-shadow: 0 0 22px rgba(255,138,61,.7), 0 2px 10px rgba(0,0,0,.9); pointer-events: none;
+    padding-left: 12px; border-left: 2px solid rgba(255,138,61,.75); }
+  #note.on { opacity: 1; transform: translateY(0); }
 
   /* 相位条 */
-  #steps { position: fixed; left: 50%; transform: translateX(-50%); bottom: 74px; z-index: 3;
-    display: flex; gap: 0; align-items: center; pointer-events: none; opacity: .92; }
+  /* 原来 bottom:74px，正好被底部按钮条压住；抬到按钮之上并加暗衬 */
+  #steps { position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px; z-index: 5;
+    display: flex; gap: 0; align-items: center; pointer-events: none;
+    background: linear-gradient(180deg, rgba(4,7,12,0) 0%, rgba(4,7,12,.55) 100%);
+    padding: 6px 14px; border-radius: 8px; }
   #steps .s { font-size: 9.5px; letter-spacing: .16em; color: rgba(160,185,210,.45); padding: 0 11px;
     border-top: 1px solid rgba(160,185,210,.18); padding-top: 7px; transition: .35s; white-space: nowrap; }
   #steps .s.on { color: var(--accent); border-top-color: var(--accent); }
